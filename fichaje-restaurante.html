@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FichaYa — Control de Presencia</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --accent: #e8c547;
+    --accent2: #e87d47;
+    --text: #f0ede8;
+    --muted: #888;
+    --green: #4caf7d;
+    --red: #e85447;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* NOISE TEXTURE */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(15,15,15,0.95);
+    backdrop-filter: blur(10px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.5rem;
+    letter-spacing: -0.03em;
+  }
+  .logo span { color: var(--accent); }
+
+  .clock {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+
+  .date-display {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  /* VIEWS */
+  .view { display: none; padding: 32px; max-width: 900px; margin: 0 auto; }
+  .view.active { display: block; animation: fadeUp 0.3s ease; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  h2 .sub { color: var(--accent); }
+
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 28px;
+    font-size: 0.95rem;
+  }
+
+  /* EMPLOYEE GRID */
+  .employee-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    margin-top: 10px;
+  }
+
+  .emp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 18px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .emp-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .emp-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(232,197,71,0.12);
+  }
+  .emp-card:hover::after { opacity: 0.04; }
+  .emp-card.checked-in { border-color: var(--green); }
+  .emp-card.checked-in:hover { box-shadow: 0 8px 24px rgba(76,175,125,0.15); }
+
+  .emp-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+    background: var(--surface2);
+    color: var(--accent);
+  }
+
+  .emp-name {
+    font-weight: 500;
+    font-size: 1rem;
+    margin-bottom: 6px;
+  }
+
+  .emp-status {
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .emp-card.checked-in .status-dot { background: var(--green); }
+  .emp-card.checked-in .emp-status { color: var(--green); }
+
+  .emp-role {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; animation: fadeIn 0.2s ease; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px;
+    max-width: 420px;
+    width: 90%;
+    animation: scaleIn 0.2s ease;
+    text-align: center;
+  }
+  @keyframes scaleIn { from { transform: scale(0.92); } to { transform: scale(1); } }
+
+  .modal-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.8rem;
+    margin: 0 auto 16px;
+    background: var(--surface2);
+    color: var(--accent);
+  }
+
+  .modal h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  .modal .modal-role { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+  .modal-time {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .modal-date { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+
+  .modal-status-badge {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 99px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 24px;
+  }
+  .badge-in { background: rgba(76,175,125,0.15); color: var(--green); border: 1px solid rgba(76,175,125,0.3); }
+  .badge-out { background: rgba(232,84,71,0.15); color: var(--red); border: 1px solid rgba(232,84,71,0.3); }
+
+  .modal-actions { display: flex; gap: 12px; justify-content: center; }
+
+  .btn {
+    padding: 13px 28px;
+    border-radius: 10px;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: #f0cf58; transform: translateY(-1px); }
+  .btn-danger {
+    background: var(--red);
+    color: #fff;
+    font-weight: 700;
+  }
+  .btn-danger:hover { background: #f06055; transform: translateY(-1px); }
+  .btn-ghost {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+  .btn-sm { padding: 8px 16px; font-size: 0.85rem; }
+
+  /* SUCCESS FLASH */
+  .flash {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: var(--green);
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 99px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    z-index: 9000;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+  .flash.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .flash.out-flash { background: var(--red); }
+
+  /* ADMIN PANEL */
+  .admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+  .tab {
+    padding: 9px 20px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--muted);
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .tab.active { background: var(--accent); color: #000; font-weight: 700; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th {
+    background: var(--surface2);
+    padding: 13px 16px;
+    text-align: left;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .badge-green { background: rgba(76,175,125,0.15); color: var(--green); }
+  .badge-red { background: rgba(232,84,71,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(232,197,71,0.15); color: var(--accent); }
+
+  /* EMPLOYEE MANAGER */
+  .emp-manager-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .emp-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+  }
+  .emp-item-info { display: flex; align-items: center; gap: 12px; }
+  .emp-item-avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--surface2);
+    color: var(--accent);
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+  }
+
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .form-group { flex: 1; min-width: 160px; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+  input, select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+
+  /* STATS */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .stat-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
+  .stat-value { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--accent); }
+
+  /* LOGIN */
+  #loginView {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+  }
+  .login-box h2 { margin-bottom: 6px; }
+  .login-box p { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+  .login-error { color: var(--red); font-size: 0.85rem; margin-top: 10px; display: none; }
+
+  /* NAV BOTTOM */
+  .nav-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 10px 18px;
+    border-radius: 99px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+    z-index: 200;
+  }
+  .nav-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* FILTERS */
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: flex-end; }
+  .filters .form-group { flex: 0 0 auto; }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 48px; color: var(--muted); font-size: 0.95rem; }
+  .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+  /* SEARCH */
+  .search-wrap { position: relative; margin-bottom: 20px; }
+  .search-wrap input { padding-left: 40px; }
+  .search-icon {
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  @media (max-width: 600px) {
+    header { padding: 14px 18px; }
+    .view { padding: 20px 16px; }
+    .clock { font-size: 1.3rem; }
+    .employee-grid { grid-template-columns: repeat(2, 1fr); }
+    .modal-actions { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Ficha<span>Ya</span></div>
+  <div class="clock" id="clock">00:00:00</div>
+  <div class="date-display" id="dateDisplay"></div>
+</header>
+
+<!-- FLASH NOTIFICATION -->
+<div class="flash" id="flash"></div>
+
+<!-- VIEW: FICHAJE -->
+<div class="view active" id="fichajeView">
+  <h2>Buenas, <span class="sub">¿quién eres?</span></h2>
+  <p class="subtitle">Toca tu nombre para fichar entrada o salida</p>
+
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchEmp" placeholder="Buscar empleado..." oninput="renderEmployeeGrid()">
+  </div>
+
+  <div class="employee-grid" id="employeeGrid"></div>
+</div>
+
+<!-- VIEW: LOGIN ADMIN -->
+<div class="view" id="loginView" style="display:none;">
+  <div class="login-box">
+    <h2>Panel <span style="color:var(--accent)">Admin</span></h2>
+    <p>Introduce la contraseña de administrador</p>
+    <div class="form-group">
+      <input type="password" id="adminPass" placeholder="Contraseña" onkeydown="if(event.key==='Enter') loginAdmin()">
+    </div>
+    <div id="loginError" class="login-error">Contraseña incorrecta</div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="showView('fichajeView')" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" onclick="loginAdmin()" style="flex:1">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW: ADMIN PANEL -->
+<div class="view" id="adminView" style="display:none;">
+  <div class="admin-header">
+    <div>
+      <h2>Panel de <span class="sub">Administración</span></h2>
+      <p class="subtitle" style="margin:0">Control de presencia del personal</p>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Exportar CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('registros')">Registros</button>
+    <button class="tab" onclick="showTab('empleados')">Empleados</button>
+  </div>
+
+  <!-- TAB: REGISTROS -->
+  <div id="tab-registros">
+    <div class="filters">
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="filterEmp" onchange="renderRegistros()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Desde</label>
+        <input type="date" id="filterFrom" onchange="renderRegistros()">
+      </div>
+      <div class="form-group">
+        <label>Hasta</label>
+        <input type="date" id="filterTo" onchange="renderRegistros()">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Limpiar</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Empleado</th>
+            <th>Cargo</th>
+            <th>Tipo</th>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="registrosBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: EMPLEADOS -->
+  <div id="tab-empleados" style="display:none;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:14px;font-size:1rem;">➕ Añadir empleado</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nombre completo</label>
+          <input type="text" id="newName" placeholder="Ej: Ana García">
+        </div>
+        <div class="form-group">
+          <label>Cargo</label>
+          <input type="text" id="newRole" placeholder="Ej: Cocinero/a">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addEmployee()">Añadir</button>
+    </div>
+
+    <div class="emp-manager-list" id="empManagerList"></div>
+  </div>
+</div>
+
+<!-- MODAL FICHAJE -->
+<div class="modal-overlay" id="fichajeModal">
+  <div class="modal">
+    <div class="modal-avatar" id="modalAvatar"></div>
+    <h3 id="modalName"></h3>
+    <p class="modal-role" id="modalRole"></p>
+    <div class="modal-time" id="modalTime"></div>
+    <div class="modal-date" id="modalDate"></div>
+    <div class="modal-status-badge" id="modalBadge"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmBtn" onclick="confirmFichaje()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAV BUTTONS -->
+<button class="nav-btn" id="navBtn" onclick="handleNav()">🔒 Admin</button>
+
+<script>
+// ====== STATE ======
+const ADMIN_PASS = "1234"; // Cambia aquí la contraseña
+let state = {
+  employees: [],
+  records: [],
+  currentView: 'fichajeView',
+  selectedEmpId: null,
+  adminLogged: false,
+  currentTab: 'registros'
+};
+
+// ====== INIT ======
+function init() {
+  loadFromStorage();
+  if (state.employees.length === 0) seedEmployees();
+  updateClock();
+  setInterval(updateClock, 1000);
+  renderEmployeeGrid();
+  updateDateDisplay();
+}
+
+function seedEmployees() {
+  state.employees = [
+    { id: uid(), name: "Ana García", role: "Jefa de cocina" },
+    { id: uid(), name: "Carlos López", role: "Camarero/a" },
+    { id: uid(), name: "María Torres", role: "Cocinero/a" },
+    { id: uid(), name: "José Ruiz", role: "Camarero/a" },
+    { id: uid(), name: "Laura Sánchez", role: "Ayudante cocina" },
+  ];
+  saveToStorage();
+}
+
+// ====== STORAGE ======
+function saveToStorage() {
+  localStorage.setItem('fichaya_employees', JSON.stringify(state.employees));
+  localStorage.setItem('fichaya_records', JSON.stringify(state.records));
+}
+
+function loadFromStorage() {
+  const emps = localStorage.getItem('fichaya_employees');
+  const recs = localStorage.getItem('fichaya_records');
+  if (emps) state.employees = JSON.parse(emps);
+  if (recs) state.records = JSON.parse(recs);
+}
+
+// ====== CLOCK ======
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('es-ES');
+}
+
+function updateDateDisplay() {
+  const now = new Date();
+  const days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('dateDisplay').textContent =
+    `${days[now.getDay()]}, ${now.getDate()} de ${months[now.getMonth()]} de ${now.getFullYear()}`;
+}
+
+// ====== VIEWS ======
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => { v.style.display = 'none'; v.classList.remove('active'); });
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  setTimeout(() => el.classList.add('active'), 10);
+  state.currentView = id;
+  updateNavBtn();
+}
+
+function updateNavBtn() {
+  const btn = document.getElementById('navBtn');
+  if (state.currentView === 'fichajeView') {
+    btn.textContent = '🔒 Admin';
+  } else {
+    btn.textContent = '⬅ Volver';
+  }
+}
+
+function handleNav() {
+  if (state.currentView === 'fichajeView') {
+    showView('loginView');
+    setTimeout(() => document.getElementById('adminPass').focus(), 200);
+  } else {
+    logout();
+  }
+}
+
+// ====== ADMIN AUTH ======
+function loginAdmin() {
+  const pass = document.getElementById('adminPass').value;
+  if (pass === ADMIN_PASS) {
+    document.getElementById('loginError').style.display = 'none';
+    document.getElementById('adminPass').value = '';
+    state.adminLogged = true;
+    showView('adminView');
+    renderAdminPanel();
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('adminPass').value = '';
+    document.getElementById('adminPass').focus();
+  }
+}
+
+function logout() {
+  state.adminLogged = false;
+  showView('fichajeView');
+  renderEmployeeGrid();
+}
+
+// ====== EMPLOYEE GRID ======
+function renderEmployeeGrid() {
+  const search = (document.getElementById('searchEmp')?.value || '').toLowerCase();
+  const grid = document.getElementById('employeeGrid');
+  const filtered = state.employees.filter(e => e.name.toLowerCase().includes(search));
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">👤</div>No se encontraron empleados</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(emp => {
+    const isIn = isCheckedIn(emp.id);
+    const lastRec = getLastRecord(emp.id);
+    const statusText = isIn ? `Dentro desde ${lastRec?.time || ''}` : 'Fuera';
+    return `
+      <div class="emp-card ${isIn ? 'checked-in' : ''}" onclick="openModal('${emp.id}')">
+        <div class="emp-avatar">${initials(emp.name)}</div>
+        <div class="emp-role">${emp.role}</div>
+        <div class="emp-name">${emp.name}</div>
+        <div class="emp-status">
+          <div class="status-dot"></div>
+          <span>${statusText}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ====== MODAL ======
+let modalInterval;
+function openModal(empId) {
+  state.selectedEmpId = empId;
+  const emp = state.employees.find(e => e.id === empId);
+  const isIn = isCheckedIn(empId);
+
+  document.getElementById('modalAvatar').textContent = initials(emp.name);
+  document.getElementById('modalName').textContent = emp.name;
+  document.getElementById('modalRole').textContent = emp.role;
+
+  const badge = document.getElementById('modalBadge');
+  const btn = document.getElementById('modalConfirmBtn');
+
+  if (isIn) {
+    badge.className = 'modal-status-badge badge-in';
+    badge.textContent = '✓ Actualmente dentro';
+    btn.textContent = 'Registrar salida';
+    btn.className = 'btn btn-danger';
+  } else {
+    badge.className = 'modal-status-badge badge-out';
+    badge.textContent = '✗ Actualmente fuera';
+    btn.textContent = 'Registrar entrada';
+    btn.className = 'btn btn-primary';
+  }
+
+  updateModalTime();
+  modalInterval = setInterval(updateModalTime, 1000);
+  document.getElementById('fichajeModal').classList.add('open');
+}
+
+function updateModalTime() {
+  const now = new Date();
+  document.getElementById('modalTime').textContent = now.toLocaleTimeString('es-ES');
+  const days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('modalDate').textContent =
+    `${days[now.getDay()]}, ${now.getDate()} de ${months[now.getMonth()]}`;
+}
+
+function closeModal() {
+  document.getElementById('fichajeModal').classList.remove('open');
+  clearInterval(modalInterval);
+  state.selectedEmpId = null;
+}
+
+function confirmFichaje() {
+  const empId = state.selectedEmpId;
+  const emp = state.employees.find(e => e.id === empId);
+  const isIn = isCheckedIn(empId);
+  const now = new Date();
+
+  const record = {
+    id: uid(),
+    empId,
+    empName: emp.name,
+    empRole: emp.role,
+    type: isIn ? 'salida' : 'entrada',
+    date: now.toLocaleDateString('es-ES'),
+    time: now.toLocaleTimeString('es-ES'),
+    timestamp: now.toISOString()
+  };
+
+  state.records.unshift(record);
+  saveToStorage();
+  closeModal();
+  renderEmployeeGrid();
+
+  showFlash(isIn
+    ? `👋 Hasta luego, ${emp.name.split(' ')[0]}!`
+    : `👋 ¡Bienvenido/a, ${emp.name.split(' ')[0]}!`,
+    isIn ? 'out' : 'in'
+  );
+}
+
+// ====== FLASH ======
+function showFlash(msg, type) {
+  const el = document.getElementById('flash');
+  el.textContent = msg;
+  el.className = `flash ${type === 'out' ? 'out-flash' : ''} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ====== ADMIN PANEL ======
+function renderAdminPanel() {
+  renderStats();
+  renderRegistros();
+  renderEmpManager();
+  populateFilters();
+}
+
+function renderStats() {
+  const today = new Date().toLocaleDateString('es-ES');
+  const todayRecs = state.records.filter(r => r.date === today);
+  const inNow = state.employees.filter(e => isCheckedIn(e.id)).length;
+  const todayEntradas = todayRecs.filter(r => r.type === 'entrada').length;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Personal dentro ahora</div>
+      <div class="stat-value">${inNow}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Entradas hoy</div>
+      <div class="stat-value">${todayEntradas}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total empleados</div>
+      <div class="stat-value">${state.employees.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Registros totales</div>
+      <div class="stat-value">${state.records.length}</div>
+    </div>
+  `;
+}
+
+function populateFilters() {
+  const sel = document.getElementById('filterEmp');
+  sel.innerHTML = '<option value="">Todos</option>' +
+    state.employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+}
+
+function renderRegistros() {
+  const empFilter = document.getElementById('filterEmp')?.value || '';
+  const fromFilter = document.getElementById('filterFrom')?.value || '';
+  const toFilter = document.getElementById('filterTo')?.value || '';
+
+  let recs = [...state.records];
+
+  if (empFilter) recs = recs.filter(r => r.empId === empFilter);
+  if (fromFilter) recs = recs.filter(r => new Date(r.timestamp) >= new Date(fromFilter));
+  if (toFilter) {
+    const to = new Date(toFilter);
+    to.setDate(to.getDate() + 1);
+    recs = recs.filter(r => new Date(r.timestamp) < to);
+  }
+
+  const tbody = document.getElementById('registrosBody');
+  if (recs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div>No hay registros</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = recs.map(r => `
+    <tr>
+      <td><strong>${r.empName}</strong></td>
+      <td style="color:var(--muted)">${r.empRole}</td>
+      <td><span class="badge ${r.type === 'entrada' ? 'badge-green' : 'badge-red'}">${r.type === 'entrada' ? '▶ Entrada' : '◼ Salida'}</span></td>
+      <td>${r.date}</td>
+      <td><strong>${r.time}</strong></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="deleteRecord('${r.id}')" style="color:var(--red);padding:4px 10px;font-size:0.75rem;">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function clearFilters() {
+  document.getElementById('filterEmp').value = '';
+  document.getElementById('filterFrom').value = '';
+  document.getElementById('filterTo').value = '';
+  renderRegistros();
+}
+
+function deleteRecord(id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  state.records = state.records.filter(r => r.id !== id);
+  saveToStorage();
+  renderAdminPanel();
+}
+
+function renderEmpManager() {
+  const list = document.getElementById('empManagerList');
+  if (state.employees.length === 0) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div>No hay empleados registrados</div>`;
+    return;
+  }
+  list.innerHTML = state.employees.map(emp => `
+    <div class="emp-item" id="emp-item-${emp.id}">
+      <div class="emp-item-info">
+        <div class="emp-item-avatar">${initials(emp.name)}</div>
+        <div>
+          <div style="font-weight:500">${emp.name}</div>
+          <div style="font-size:0.8rem;color:var(--muted)">${emp.role}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="editEmployee('${emp.id}')">✏ Editar</button>
+        <button class="btn btn-ghost btn-sm" onclick="removeEmployee('${emp.id}')" style="color:var(--red)">✕ Eliminar</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addEmployee() {
+  const name = document.getElementById('newName').value.trim();
+  const role = document.getElementById('newRole').value.trim();
+  if (!name || !role) { alert('Por favor rellena nombre y cargo'); return; }
+
+  state.employees.push({ id: uid(), name, role });
+  saveToStorage();
+  document.getElementById('newName').value = '';
+  document.getElementById('newRole').value = '';
+  renderEmpManager();
+  populateFilters();
+  showFlash(`✓ ${name} añadido/a`, 'in');
+}
+
+function removeEmployee(id) {
+  const emp = state.employees.find(e => e.id === id);
+  if (!confirm(`¿Eliminar a ${emp.name}? Sus registros se conservarán.`)) return;
+  state.employees = state.employees.filter(e => e.id !== id);
+  saveToStorage();
+  renderEmpManager();
+  populateFilters();
+}
+
+function editEmployee(id) {
+  const emp = state.employees.find(e => e.id === id);
+  const item = document.getElementById(`emp-item-${id}`);
+  item.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:center;flex:1;flex-wrap:wrap;">
+      <div class="emp-item-avatar">${initials(emp.name)}</div>
+      <input id="edit-name-${id}" value="${emp.name}" style="flex:1;min-width:120px;" placeholder="Nombre">
+      <input id="edit-role-${id}" value="${emp.role}" style="flex:1;min-width:120px;" placeholder="Cargo">
+    </div>
+    <div style="display:flex;gap:8px;margin-left:10px;">
+      <button class="btn btn-primary btn-sm" onclick="saveEmployee('${id}')">✓ Guardar</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderEmpManager()">Cancelar</button>
+    </div>
+  `;
+  document.getElementById(`edit-name-${id}`).focus();
+}
+
+function saveEmployee(id) {
+  const name = document.getElementById(`edit-name-${id}`).value.trim();
+  const role = document.getElementById(`edit-role-${id}`).value.trim();
+  if (!name || !role) { alert('El nombre y el cargo no pueden estar vacíos'); return; }
+  const emp = state.employees.find(e => e.id === id);
+  emp.name = name;
+  emp.role = role;
+  saveToStorage();
+  renderEmpManager();
+  populateFilters();
+  showFlash(`✓ ${name} actualizado/a`, 'in');
+}
+
+// ====== TABS ======
+function showTab(tab) {
+  state.currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-registros').style.display = tab === 'registros' ? 'block' : 'none';
+  document.getElementById('tab-empleados').style.display = tab === 'empleados' ? 'block' : 'none';
+}
+
+// ====== EXPORT CSV ======
+function exportCSV() {
+  const empFilter = document.getElementById('filterEmp')?.value || '';
+  const fromFilter = document.getElementById('filterFrom')?.value || '';
+  const toFilter = document.getElementById('filterTo')?.value || '';
+
+  let recs = [...state.records];
+  if (empFilter) recs = recs.filter(r => r.empId === empFilter);
+  if (fromFilter) recs = recs.filter(r => new Date(r.timestamp) >= new Date(fromFilter));
+  if (toFilter) {
+    const to = new Date(toFilter);
+    to.setDate(to.getDate() + 1);
+    recs = recs.filter(r => new Date(r.timestamp) < to);
+  }
+
+  const header = 'Empleado;Cargo;Tipo;Fecha;Hora\n';
+  const rows = recs.map(r => `${r.empName};${r.empRole};${r.type};${r.date};${r.time}`).join('\n');
+  const csv = '\uFEFF' + header + rows;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fichajes_${new Date().toLocaleDateString('es-ES').replace(/\//g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ====== HELPERS ======
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function initials(name) {
+  return name.split(' ').slice(0,2).map(n => n[0].toUpperCase()).join('');
+}
+
+function isCheckedIn(empId) {
+  const last = state.records.find(r => r.empId === empId);
+  return last?.type === 'entrada';
+}
+
+function getLastRecord(empId) {
+  return state.records.find(r => r.empId === empId);
+}
+
+// Close modal on overlay click
+document.getElementById('fichajeModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Login on Enter
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+init();
+</script>
+</body>
+</html>
